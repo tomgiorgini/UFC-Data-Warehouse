@@ -1,13 +1,13 @@
 import pandas as pd
 
 # Path to the CSV file
-file_path = 'df.csv'
+file_path = 'df_total.csv'
 
-df = pd.read_csv(file_path)
+df_total = pd.read_csv(file_path)
 
-columns = df.columns.tolist()
-column_types = df.dtypes
-column_nan = df.isna().any()
+file_path = 'df_common.csv'
+
+df_common = pd.read_csv(file_path)
 
 fights_col = ['r_fighter','b_fighter','date', 'location', 'referee', 'winner', 'finish', 'finishdetails', 
     'finishround', 'finishroundtime', 'titlebout', 'weightclass', 'gender', 
@@ -88,11 +88,6 @@ b_fighters_col = [
     'b_wflyweightrank', 'b_wstrawweightrank', 'b_welterweightrank'
 ]
 
-df_fights = df[list(fights_col)]
-df_blue_fighter = df[list(b_fighters_col)]
-df_red_fighter = df[list(r_fighters_col)]
-
-
 def rename_blue(col):
     if col.startswith("b_"):
         new_col = col.replace("b_", "", 1)
@@ -108,6 +103,12 @@ def rename_red(col):
         new_col = col
     return new_col
 
+#WITH DF_TOTAL
+
+df_fights = df_total[list(fights_col)]
+df_blue_fighter = df_total[list(b_fighters_col)]
+df_red_fighter = df_total[list(r_fighters_col)]
+
 df_blue = df_blue_fighter.rename(columns=lambda x: rename_blue(x))
 df_red = df_red_fighter.rename(columns=lambda x: rename_red(x))
 df_fighters = pd.concat([df_red, df_blue], ignore_index=True)
@@ -117,7 +118,24 @@ df_fighters = df_fighters.sort_values(by=["fighter","date"]).reset_index(drop=Tr
 df_fighters['winsbydecision'] = df_fighters['winsbydecisionmajority'] + df_fighters['winsbydecisionsplit'] + df_fighters['winsbydecisionunanimous']
 df_fighters['winsbystoppage'] = df_fighters['winsbyko'] + df_fighters['winsbysubmission'] + df_fighters['winsbytkodoctorstoppage']
 
-df_fighters.to_csv("fighters.csv",index = False)
-df_fights.to_csv("fights.csv",index = False)
+df_fighters.to_csv("fighters_total.csv",index = False)
+df_fights.to_csv("fights_total.csv",index = False)
 
 
+#WITH DF_COMMON
+
+df_fights = df_common[list(fights_col)]
+df_blue_fighter = df_common[list(b_fighters_col)]
+df_red_fighter = df_common[list(r_fighters_col)]
+
+df_blue = df_blue_fighter.rename(columns=lambda x: rename_blue(x))
+df_red = df_red_fighter.rename(columns=lambda x: rename_red(x))
+df_fighters = pd.concat([df_red, df_blue], ignore_index=True)
+
+df_fighters = df_fighters.sort_values(by=["fighter","date"]).reset_index(drop=True)
+
+df_fighters['winsbydecision'] = df_fighters['winsbydecisionmajority'] + df_fighters['winsbydecisionsplit'] + df_fighters['winsbydecisionunanimous']
+df_fighters['winsbystoppage'] = df_fighters['winsbyko'] + df_fighters['winsbysubmission'] + df_fighters['winsbytkodoctorstoppage']
+
+df_fighters.to_csv("fighters_common.csv",index = False)
+df_fights.to_csv("fights_common.csv",index = False)

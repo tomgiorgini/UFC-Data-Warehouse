@@ -354,8 +354,8 @@ df1['date'] = pd.to_datetime(df1['date'], errors='coerce')
 df2['date'] = pd.to_datetime(df2['date'], errors='coerce')
 
 # 2) (Opzionale) Filtra df1 sul range di date desiderato
-#start_date = '2010-03-21'
-#end_date   = '2021-03-20'
+start_date = '2010-03-21'
+end_date   = '2021-03-20'
 #df2 = df2[(df2['date'] >= start_date) & (df2['date'] <= end_date)].copy()
 #df1 = df1[(df1['date'] >= start_date) & (df1['date'] <= end_date)].copy()
 
@@ -396,9 +396,10 @@ df = df.reindex(columns=ordered_cols)
 df = df.sort_values(by=["date","r_fighter"]).reset_index(drop=True)
 
 
-df.to_csv("df.csv",index = False)
+df.to_csv("df_total.csv",index = False)
 
-
+df_common = df[(df['date'] >= start_date) & (df['date'] <= end_date)].copy()
+df_common.to_csv("df_common.csv",index = False)
 
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
