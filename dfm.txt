@@ -30,7 +30,8 @@ Dimensions:
                 -> AvgTDDif
                 -> BetterRank
                 
--Results: Finish -> (FinishDetails, FinishRound -> FinishRoundTime -> TotalFightTimeSecs)  
+-Results: Finish -> (FinishDetails, FinishRound -> FinishRoundTime -> TotalFightTimeSecs) 
+
 -Odds: -> RedOdds -> (RedDecOdds, RKOOdds , RSubOdds)
        -> RedExpectedValue
        -> BlueOdds -> (BlueDecOdds, BKOOdds, BSubOdds)
@@ -56,14 +57,15 @@ Dimensions:
         ->Age
 
 -Fight Stats:  -> wins -> WinsByDecision ->( WinsByDecisionMajority , WinsByDecisionSplit,  WinsByDecisionUnanimous)
-               |____-> WinsByStoppage -> (WinsByKO , WinsBySubmission , WinsByTKODoctorStoppage)
+                     |____-> WinsByStoppage -> (WinsByKO , WinsBySubmission , WinsByTKODoctorStoppage)
             -> Losses
             -> Draws
             -> currentwinstreak -> longestwinstreak
             -> currentlosestreak
-            ->totaltimefought -> totalroundsfought -> totaltitlebouts
+            -> totaltimefought -> totalroundsfought -> totaltitlebouts
 
--Rank: (ALL OPTIONAL) matchwcrank, bantamweightrank, featherweightrank, flyweightrank,
+
+-Rank: (Forse meglio mettere solo matchwcrank e pfprank, gli altri non ci interessano più di tanto) matchwcrank, bantamweightrank, featherweightrank, flyweightrank,
     heavyweightrank, lightheavyweightrank, lightweightrank,
     middleweightrank, pfprank, wbantamweightrank, wfeatherweightrank,
     wflyweightrank, wstrawweightrank, welterweightrank
@@ -76,10 +78,7 @@ Dimensions:
                      |_-> avgtdatt -> (avgsubatt,avgrev,avgctrltime)
 
 -AvgOppStats: ->  avgoppkd
-              ->  avgoppsigstrpct  -> avgoppsigstrlanded 
-                                 -> (avgoppheadlanded, avgoppbodylanded, avgoppleglanded, avgoppdistancelanded, avgoppclinchlanded, avgoppgroundlanded)
-                               |_-> avgoppsigstratt 
-                                 -> (avgoppheadatt, avgoppbodyatt, avgopplegatt, avgoppdistanceatt, avgoppclinchatt, avgoppgroundatt)
+              ->  avgoppsigstrpct  -> avgoppsigstrlanded  -> (avgoppheadlanded, avgoppbodylanded, avgoppleglanded, avgoppdistancelanded, avgoppclinchlanded, avgoppgroundlanded)
+                               |_-> avgoppsigstratt -> (avgoppheadatt, avgoppbodyatt, avgopplegatt, avgoppdistanceatt, avgoppclinchatt, avgoppgroundatt)
                -> avgopptdpct  -> avgopptdlanded
-                           |_-> avgopptdatt -> (avgoppsubatt, avgopprev, avgoppctrltime)
-
+                            |_-> avgopptdatt -> (avgoppsubatt, avgopprev, avgoppctrltime)

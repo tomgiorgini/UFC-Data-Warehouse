@@ -1,11 +1,11 @@
 import pandas as pd
 
 # Path to the CSV file
-file_path = 'ufc-master.csv'
+file_path = '2010_2024.csv' #2010-2024
 
 df1 = pd.read_csv(file_path)
 
-file_path = 'data.csv'
+file_path = '1994_2021.csv' #1994-2021
 
 df2 = pd.read_csv(file_path)
 
@@ -66,6 +66,7 @@ df2 = df2.rename(columns={'b_draw': 'b_draws', 'r_draw': 'r_draws','b_winbyko/tk
                           'r_winbysubmission': 'r_winsbysubmission',})
 
 
+#Colonne in comune tra i due dataset
 columns = [
     # -- FIGHT-LEVEL (data comune) --
     'r_fighter',
@@ -134,6 +135,7 @@ columns = [
 ]
 
 
+#Tutte le colonmne (unione)
 ordered_cols = [
     # 1. Info generali evento
     'r_fighter','b_fighter','date', 'location', 'referee', 'winner', 'finish', 'finishdetails', 
@@ -235,6 +237,8 @@ for col in df2.select_dtypes(include='object'):
 df1 = df1.round(2)
 df2 = df2.round(2)
 
+
+# Mappa per uniformare i nomi
 name_map = {
     "Quinton Jackson": "Rampage Jackson",
     "Mirko Cro Cop": "Mirko Filipovic",
@@ -323,6 +327,8 @@ df1['b_fighter'] = df1['b_fighter'].replace(name_map)
 df2['b_fighter'] = df2['b_fighter'].replace(name_map)
 df2['r_fighter'] = df2['r_fighter'].replace(name_map)
 
+
+#FORZARE I DATI DI FD1 SU DF2
 
 columns_to_update = [
     # Fight-level
