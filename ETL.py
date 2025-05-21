@@ -10,6 +10,9 @@ file_path = '1994_2021.csv' #1994-2021
 df2 = pd.read_csv(file_path)
 
 
+df_events = pd.read_csv('completed_events_small.csv')
+df_events.drop('location',axis=1)
+
 def rename_blue(col):
     if col.startswith("Blue"):
         new_col = col.replace("Blue", "B_", 1)
@@ -63,7 +66,9 @@ df2 = df2.rename(columns={'b_draw': 'b_draws', 'r_draw': 'r_draws','b_winbyko/tk
                           ,'r_winbyko/tko':'r_winsbyko', 'b_winbytkodoctorstoppage': 'b_winsbytkodoctorstoppage',
                           'r_winbytkodoctorstoppage': 'r_winsbytkodoctorstoppage',
                           'b_winbysubmission': 'b_winsbysubmission',
-                          'r_winbysubmission': 'r_winsbysubmission',})
+                          'r_winbysubmission': 'r_winsbysubmission',
+                          'r_winbydecisionsplit': 'r_winsbydecisionsplit',
+                          'b_winbydecisionsplit': 'b_winsbydecisionsplit'})
 
 
 #Colonne in comune tra i due dataset
@@ -402,10 +407,44 @@ df = df.reindex(columns=ordered_cols)
 df = df.sort_values(by=["date","r_fighter"]).reset_index(drop=True)
 
 
-df.to_csv("df_total.csv",index = False)
-
 df_common = df[(df['date'] >= start_date) & (df['date'] <= end_date)].copy()
-df_common.to_csv("df_common.csv",index = False)
+df_events['date'] = pd.to_datetime(df_events['date'])
+
+df = df_common.merge(df_events[['date','event']], on =['date'], how = 'left')
+
+df['month'] = df['date'].dt.strftime('%m-%Y')
+df['year'] = df['date'].dt.year
+
+
+parts = df['location'].str.split(',', n=2, expand=True)
+parts = parts.apply(lambda col: col.str.strip())
+parts.columns = ['city', 'maybe_state', 'country']
+mask_no_state = parts['country'].isna()
+parts['state'] = parts['maybe_state'].where(~mask_no_state, '')  
+parts['country'] = parts['country'].fillna(parts['maybe_state'])
+df = df.join(parts[['city','state','country']])
+
+cols_to_keep = ['r_fighter','b_fighter','event', 'date','month','year', 'gender', 'location', 
+    'city','state', 'country', 'referee', 'winner', 'finish', 'finishdetails','finishround',
+    'totalfighttimesecs','titlebout', 'weightclass', 'numberofrounds', 'emptyarena',
+    'heightdif','agedif', 'reachdif', 
+    'r_age' ,'r_stance', 'r_heightcms', 'r_reachcms', 'r_weightlbs', 'b_odds',
+    'b_age', 'b_stance', 'b_heightcms', 'b_reachcms', 'b_weightlbs', 'r_odds',
+    'r_losses','r_draws', 'r_wins','r_winbydecisionmajority', 'r_winbydecisionunanimous', 
+    'r_winsbydecisionmajority', 'r_winsbydecisionsplit', 'r_winsbydecisionunanimous',
+    'r_winsbyko', 'r_winsbysubmission', 'r_winsbytkodoctorstoppage',
+    'b_losses', 'b_draws', 'b_wins','b_winbydecisionmajority', 'b_winbydecisionunanimous',
+    'b_winsbydecisionmajority', 'b_winsbydecisionsplit', 'b_winsbydecisionunanimous',
+    'b_winsbyko', 'b_winsbysubmission', 'b_winsbytkodoctorstoppage',
+    'r_avgkd','r_avgsigstratt', 'r_avgsigstrlanded', 'r_avgtdatt', 'r_avgtdlanded',
+    'r_avgsubatt', 'r_avgctrltime(seconds)', 'r_matchwcrank', 'r_pfprank',
+    'b_avgkd','b_avgsigstratt', 'b_avgsigstrlanded','b_avgtdatt', 'b_avgtdlanded',
+    'b_avgsubatt', 'b_avgctrltime(seconds)','b_matchwcrank', 'b_pfprank'
+    ]
+
+df = df[cols_to_keep]
+
+df.to_csv("df_common.csv",index = False)
 
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
