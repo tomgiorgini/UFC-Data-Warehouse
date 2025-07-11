@@ -412,9 +412,18 @@ df_events['date'] = pd.to_datetime(df_events['date'])
 
 df = df_common.merge(df_events[['date','event']], on =['date'], how = 'left')
 
-df['month'] = df['date'].dt.strftime('%m-%Y')
+df['month'] = df['date'].dt.month
 df['year'] = df['date'].dt.year
-
+df['b_record'] = (
+    df['b_wins'].astype(str) + '-' +
+    df['b_losses'].astype(str) + '-' +
+    df['b_draws'].astype(str)
+)
+df['r_record'] = (
+    df['r_wins'].astype(str) + '-' +
+    df['r_losses'].astype(str) + '-' +
+    df['r_draws'].astype(str)
+)
 
 parts = df['location'].str.split(',', n=2, expand=True)
 parts = parts.apply(lambda col: col.str.strip())
@@ -424,12 +433,15 @@ parts['state'] = parts['maybe_state'].where(~mask_no_state, '')
 parts['country'] = parts['country'].fillna(parts['maybe_state'])
 df = df.join(parts[['city','state','country']])
 
+
+
+
 cols_to_keep = ['r_fighter','b_fighter','event', 'date','month','year', 'gender', 'location', 
     'city','state', 'country', 'referee', 'winner', 'finish', 'finishdetails','finishround',
     'totalfighttimesecs','titlebout', 'weightclass', 'numberofrounds', 'emptyarena',
     'heightdif','agedif', 'reachdif', 
-    'r_age' ,'r_stance', 'r_heightcms', 'r_reachcms', 'r_weightlbs', 'b_odds',
-    'b_age', 'b_stance', 'b_heightcms', 'b_reachcms', 'b_weightlbs', 'r_odds',
+    'r_age' ,'r_stance', 'r_heightcms', 'r_reachcms', 'r_weightlbs', 'b_odds', 'b_record',
+    'b_age', 'b_stance', 'b_heightcms', 'b_reachcms', 'b_weightlbs', 'r_odds', 'r_record',
     'r_losses','r_draws', 'r_wins','r_winbydecisionmajority', 'r_winbydecisionunanimous', 
     'r_winsbydecisionmajority', 'r_winsbydecisionsplit', 'r_winsbydecisionunanimous',
     'r_winsbyko', 'r_winsbysubmission', 'r_winsbytkodoctorstoppage',
@@ -443,7 +455,7 @@ cols_to_keep = ['r_fighter','b_fighter','event', 'date','month','year', 'gender'
     ]
 
 df = df[cols_to_keep]
-
+df = df.dropna(subset=['winner'])
 df.to_csv("df_common.csv",index = False)
 
 pd.set_option('display.max_rows', None)
