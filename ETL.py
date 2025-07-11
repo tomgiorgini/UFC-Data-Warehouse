@@ -455,6 +455,9 @@ cols_to_keep = ['r_fighter','b_fighter','event', 'date','month','year', 'gender'
     ]
 
 df = df[cols_to_keep]
+
+
+
 df = df.dropna(subset=['winner'])
 df.to_csv("df_common.csv",index = False)
 
