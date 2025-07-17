@@ -68,7 +68,11 @@ df2 = df2.rename(columns={'b_draw': 'b_draws', 'r_draw': 'r_draws','b_winbyko/tk
                           'b_winbysubmission': 'b_winsbysubmission',
                           'r_winbysubmission': 'r_winsbysubmission',
                           'r_winbydecisionsplit': 'r_winsbydecisionsplit',
-                          'b_winbydecisionsplit': 'b_winsbydecisionsplit'})
+                          'b_winbydecisionsplit': 'b_winsbydecisionsplit',
+                          'r_winbydecisionmajority':'r_winsbydecisionmajority' , 
+                          'r_winbydecisionunanimous':'r_winsbydecisionunanimous' ,
+                          'b_winbydecisionmajority': 'b_winsbydecisionmajority', 
+                          'b_winbydecisionunanimous': 'b_winsbydecisionunanimous',})
 
 
 #Colonne in comune tra i due dataset
@@ -223,7 +227,7 @@ ordered_cols = [
     'totaltitleboutdif', 'windif', 'winstreakdif'
 ]
 
-df = pd.DataFrame(columns=ordered_cols)
+
 
 df1 = df1.sort_values(by=["date","r_fighter"]).reset_index(drop=True)
 df2 = df2.sort_values(by=["date","r_fighter"]).reset_index(drop=True)
@@ -332,120 +336,83 @@ df1['b_fighter'] = df1['b_fighter'].replace(name_map)
 df2['b_fighter'] = df2['b_fighter'].replace(name_map)
 df2['r_fighter'] = df2['r_fighter'].replace(name_map)
 
-
-#FORZARE I DATI DI FD1 SU DF2
-
-columns_to_update = [
-    # Fight-level
-    'location', 'winner', 'titlebout', 'weightclass',
-    
-    # B fighter (dati generali)
-    'b_age','b_stance','b_heightcms','b_reachcms','b_weightlbs',
-
-    # B fighter (streak, record)
-    'b_currentlosestreak','b_currentwinstreak','b_draws','b_longestwinstreak','b_wins','b_losses',
-    'b_winsbyko','b_winsbysubmission','b_winsbytkodoctorstoppage','b_totalroundsfought','b_totaltitlebouts',
-
-    # B fighter (statistiche)
-    'b_avgsigstrlanded','b_avgsigstrpct','b_avgsubatt','b_avgtdlanded','b_avgtdpct',
-
-    # R fighter (dati generali)
-    'r_age','r_stance','r_heightcms','r_reachcms','r_weightlbs',
-
-    # R fighter (streak, record)
-    'r_currentlosestreak','r_currentwinstreak','r_draws','r_longestwinstreak','r_wins','r_losses',
-    'r_winsbyko','r_winsbysubmission','r_winsbytkodoctorstoppage','r_totalroundsfought','r_totaltitlebouts',
-
-    # R fighter (statistiche)
-    'r_avgsigstrlanded','r_avgsigstrpct','r_avgsubatt','r_avgtdlanded','r_avgtdpct'
-]
-
 # 1) Converti le date in datetime
 df1['date'] = pd.to_datetime(df1['date'], errors='coerce')
 df2['date'] = pd.to_datetime(df2['date'], errors='coerce')
 
-# 2) (Opzionale) Filtra df1 sul range di date desiderato
 start_date = '2010-03-21'
 end_date   = '2021-03-20'
-#df2 = df2[(df2['date'] >= start_date) & (df2['date'] <= end_date)].copy()
-#df1 = df1[(df1['date'] >= start_date) & (df1['date'] <= end_date)].copy()
 
-# 3) Crea una colonna "pk" in df2 e df1_sub per avere una chiave univoca
-df2['pk'] = (
-    df2['date'].astype(str) + "_" +
-    df2['r_fighter'].astype(str) + "_" +
-    df2['b_fighter'].astype(str)
+df1['month'] = df1['date'].dt.month
+df1['year'] = df1['date'].dt.year
+df1['b_record'] = (
+    df1['b_wins'].astype(str) + '-' +
+    df1['b_losses'].astype(str) + '-' +
+    df1['b_draws'].astype(str)
+)
+df1['r_record'] = (
+    df1['r_wins'].astype(str) + '-' +
+    df1['r_losses'].astype(str) + '-' +
+    df1['r_draws'].astype(str)
 )
 
-df1['pk'] = (
-    df1['date'].astype(str) + "_" +
-    df1['r_fighter'].astype(str) + "_" +
-    df1['b_fighter'].astype(str)
-)
-
-# 4) Assegna i valori di df1_sub a df2.
-#    Per ogni colonna, creiamo un dizionario {pk: valore_di_df1}, e lo mappiamo su df2.
-#    In questo modo, df2[col] viene sovrascritto dai valori di df1_sub (anche se sono NaN).
-for col in columns_to_update:
-    if col in df1.columns:
-        # costruiamo la mappatura pk -> valore (df1_sub)
-        map_dict = pd.Series(df1[col].values, index=df1['pk']).to_dict()
-        # assegniamo a df2 i valori corrispondenti
-        df2[col] = df2['pk'].map(map_dict)
-
-# 5) Rimuoviamo la colonna pk da df2, se non serve più
-df2.drop(columns='pk', inplace=True)
-
-# A questo punto, df2 è stato "forzato" con i valori di df1_sub,
-# sulle stesse righe (stessa chiave pk) e per le stesse date nel range
-
-
-
-key_cols = ['r_fighter', 'b_fighter', 'date'] 
-df = pd.merge(df1, df2, how='outer', on=columns)
-df = df.reindex(columns=ordered_cols)
-df = df.sort_values(by=["date","r_fighter"]).reset_index(drop=True)
-
-
-df_common = df[(df['date'] >= start_date) & (df['date'] <= end_date)].copy()
-df_events['date'] = pd.to_datetime(df_events['date'])
-
-df = df_common.merge(df_events[['date','event']], on =['date'], how = 'left')
-
-df['month'] = df['date'].dt.month
-df['year'] = df['date'].dt.year
-df['b_record'] = (
-    df['b_wins'].astype(str) + '-' +
-    df['b_losses'].astype(str) + '-' +
-    df['b_draws'].astype(str)
-)
-df['r_record'] = (
-    df['r_wins'].astype(str) + '-' +
-    df['r_losses'].astype(str) + '-' +
-    df['r_draws'].astype(str)
-)
-
-parts = df['location'].str.split(',', n=2, expand=True)
+# 1) Stessa preparazione di parts
+parts = df1['location'].str.split(',', n=2, expand=True)
 parts = parts.apply(lambda col: col.str.strip())
-parts.columns = ['city', 'maybe_state', 'country']
-mask_no_state = parts['country'].isna()
-parts['state'] = parts['maybe_state'].where(~mask_no_state, '')  
-parts['country'] = parts['country'].fillna(parts['maybe_state'])
-df = df.join(parts[['city','state','country']])
+parts.columns = ['city','state','country']
+
+mask = parts['country'].isna() & parts['state'].notna()
+parts.loc[mask, 'country'] = parts.loc[mask, 'state']
+parts.loc[mask, 'state'] = ''
+
+# 2) Elimina le colonne city, state, country da df1 se già esistono
+df1 = df1.drop(columns=['city','state','country'], errors='ignore')
+
+# 3) Unisci le tre colonne nuove
+df1 = df1.join(parts[['city','state','country']])
 
 
 
+df2['month'] = df2['date'].dt.month
+df2['year'] = df2['date'].dt.year
+df2['b_record'] = (
+    df2['b_wins'].astype(str) + '-' +
+    df2['b_losses'].astype(str) + '-' +
+    df2['b_draws'].astype(str)
+)
+df2['r_record'] = (
+    df2['r_wins'].astype(str) + '-' +
+    df2['r_losses'].astype(str) + '-' +
+    df2['r_draws'].astype(str)
+)
 
-cols_to_keep = ['r_fighter','b_fighter','event', 'date','month','year', 'gender', 'location', 
+# 1) Stessa preparazione di parts
+parts = df2['location'].str.split(',', n=2, expand=True)
+parts = parts.apply(lambda col: col.str.strip())
+parts.columns = ['city','state','country']
+
+mask = parts['country'].isna() & parts['state'].notna()
+parts.loc[mask, 'country'] = parts.loc[mask, 'state']
+parts.loc[mask, 'state'] = ''
+
+# 2) Elimina le colonne city, state, country da df2 se già esistono
+df2 = df2.drop(columns=['city','state','country'], errors='ignore')
+
+# 3) Unisci le tre colonne nuove
+df2 = df2.join(parts[['city','state','country']])
+
+
+
+cols_to_keep = ['r_fighter','b_fighter', 'event','date','month','year', 'gender', 'location', 
     'city','state', 'country', 'referee', 'winner', 'finish', 'finishdetails','finishround',
     'totalfighttimesecs','titlebout', 'weightclass', 'numberofrounds', 'emptyarena',
     'heightdif','agedif', 'reachdif', 
     'r_age' ,'r_stance', 'r_heightcms', 'r_reachcms', 'r_weightlbs', 'b_odds', 'b_record',
     'b_age', 'b_stance', 'b_heightcms', 'b_reachcms', 'b_weightlbs', 'r_odds', 'r_record',
-    'r_losses','r_draws', 'r_wins','r_winbydecisionmajority', 'r_winbydecisionunanimous', 
+    'r_losses','r_draws', 'r_wins','r_winsbydecisionmajority', 'r_winsbydecisionunanimous', 
     'r_winsbydecisionmajority', 'r_winsbydecisionsplit', 'r_winsbydecisionunanimous',
     'r_winsbyko', 'r_winsbysubmission', 'r_winsbytkodoctorstoppage',
-    'b_losses', 'b_draws', 'b_wins','b_winbydecisionmajority', 'b_winbydecisionunanimous',
+    'b_losses', 'b_draws', 'b_wins','b_winsbydecisionmajority', 'b_winsbydecisionunanimous',
     'b_winsbydecisionmajority', 'b_winsbydecisionsplit', 'b_winsbydecisionunanimous',
     'b_winsbyko', 'b_winsbysubmission', 'b_winsbytkodoctorstoppage',
     'r_avgkd','r_avgsigstratt', 'r_avgsigstrlanded', 'r_avgtdatt', 'r_avgtdlanded',
@@ -454,12 +421,123 @@ cols_to_keep = ['r_fighter','b_fighter','event', 'date','month','year', 'gender'
     'b_avgsubatt', 'b_avgctrltime(seconds)','b_matchwcrank', 'b_pfprank'
     ]
 
-df = df[cols_to_keep]
 
 
+df1 = df1[(df1['date'] >= start_date) & (df1['date'] <= end_date)].copy()
+df2 = df2[(df2['date'] >= start_date) & (df2['date'] <= end_date)].copy()
+
+# lista delle colonne che voglio e che sono effettivamente in df1
+common1 = [c for c in cols_to_keep if c in df1.columns]
+df1 = df1[common1]
+
+# stessa cosa su df2
+common2 = [c for c in cols_to_keep if c in df2.columns]
+df2 = df2[common2]
+
+
+
+col1 =['r_fighter', 'b_fighter', 'date', 'month', 'year', 'gender', 'location',
+       'city', 'state', 'country', 'finish', 'finishdetails',
+       'finishround', 'totalfighttimesecs', 'titlebout', 'weightclass',
+       'numberofrounds', 'emptyarena', 'heightdif', 'agedif', 'reachdif',
+       'r_odds', 'r_age', 'r_stance', 'r_heightcms', 'r_reachcms', 'r_weightlbs',
+       'b_odds',  'b_age', 'b_stance', 'b_heightcms', 'b_reachcms','b_weightlbs', 
+       'r_matchwcrank', 'r_pfprank', 'b_matchwcrank', 'b_pfprank']
+
+col2 = ['r_fighter', 'b_fighter', 'date', 'referee', 'winner', 
+       'r_record','r_losses', 'r_draws', 'r_wins','r_winsbydecisionmajority', 'r_winsbydecisionunanimous',
+       'r_winsbydecisionsplit', 'r_winsbyko', 'r_winsbysubmission',
+       'r_winsbytkodoctorstoppage','b_record', 'b_losses', 'b_draws', 'b_wins',
+       'b_winsbydecisionmajority', 'b_winsbydecisionunanimous',
+       'b_winsbydecisionsplit', 'b_winsbyko', 'b_winsbysubmission',
+       'b_winsbytkodoctorstoppage', 'r_avgkd', 'r_avgsigstratt',
+       'r_avgsigstrlanded', 'r_avgtdatt', 'r_avgtdlanded', 'r_avgsubatt',
+       'r_avgctrltime(seconds)', 'b_avgkd', 'b_avgsigstratt',
+       'b_avgsigstrlanded', 'b_avgtdatt', 'b_avgtdlanded', 'b_avgsubatt',
+       'b_avgctrltime(seconds)']
+df1= df1[col1]
+df2= df2[col2]
+df1.to_csv("df_10_24_up.csv",index = False)
+df2.to_csv("df_94_21_up.csv",index = False)
+
+
+
+key_cols = ['r_fighter', 'b_fighter', 'date'] 
+df = pd.merge(df1, df2, how='outer',on=key_cols)
+df = df.sort_values(by=["date","r_fighter"]).reset_index(drop=True)
+df_events['date'] = pd.to_datetime(df_events['date'])
+df = df.merge(df_events[['date','event']], on =['date'], how = 'left')
 
 df = df.dropna(subset=['winner'])
-df.to_csv("df_common.csv",index = False)
+df = df.dropna(subset=['location'])
+
+df['heightdif'] = round(df['r_heightcms'] - df['b_heightcms'],2)
+df['reachdif'] = round(df['r_reachcms'] - df['b_reachcms'],2)
+df['agedif'] = round(df['r_age'] - df['b_age'],2)
+
+int_cols = [
+    'month','year','finishround','totalfighttimesecs','numberofrounds',
+    'r_odds','b_odds','r_age','b_age','agedif','r_weightlbs','b_weightlbs',
+    'r_matchwcrank','r_pfprank','b_matchwcrank','b_pfprank',
+    'r_losses','r_draws','r_wins','b_losses','b_draws','b_wins',
+    'r_winsbydecisionsplit','r_winsbyko','r_winsbysubmission',
+    'r_winsbydecisionmajority','r_winsbydecisionunanimous',
+    'r_winsbytkodoctorstoppage','b_winsbydecisionmajority',
+    'b_winsbydecisionunanimous','b_winsbydecisionsplit','b_winsbyko',
+    'b_winsbysubmission','b_winsbytkodoctorstoppage'
+]
+
+for x in int_cols:
+    df[x] = df[x].astype('Int64')
+
+
+df['titlebout'] = df['titlebout'].astype('bool')
+df['emptyarena'] = df['emptyarena'].astype('bool')
+
+avg_cols = [c for c in df.columns if c.startswith(('r_avg','b_avg'))]
+
+# 2) Riempi i NaN con 0 solo in quelle colonne
+df[avg_cols] = df[avg_cols].fillna(0)
+
+null_counts = df.isna().sum().reset_index()
+null_counts.columns = ['column', 'null_count']
+
+
 
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
+
+
+
+df = df.loc[:, ~df.columns.duplicated()]
+
+
+desired_order = [
+    'r_fighter','b_fighter','event','date','month','year','gender',
+    'location','city','state','country','referee','winner','finish',
+    'finishdetails','finishround','totalfighttimesecs','titlebout',
+    'weightclass','numberofrounds','emptyarena','heightdif','agedif',
+    'reachdif','r_odds','r_age','r_stance','r_heightcms','r_reachcms',
+    'r_weightlbs','b_odds','b_age','b_stance','b_heightcms','b_reachcms',
+    'b_weightlbs','r_record','r_losses','r_draws','r_wins',
+    'r_winsbydecisionmajority','r_winsbydecisionunanimous',
+    'r_winsbydecisionsplit','r_winsbyko','r_winsbysubmission',
+    'r_winsbytkodoctorstoppage','b_record','b_losses','b_draws',
+    'b_wins','b_winsbydecisionunanimous','b_winsbydecisionmajority',
+    'b_winsbydecisionsplit','b_winsbyko','b_winsbysubmission',
+    'b_winsbytkodoctorstoppage','r_avgkd','r_avgsigstratt',
+    'r_avgsigstrlanded','r_avgtdatt','r_avgtdlanded','r_avgsubatt',
+    'r_avgctrltime(seconds)','r_matchwcrank','r_pfprank','b_avgkd',
+    'b_avgsigstratt','b_avgsigstrlanded','b_avgtdatt','b_avgtdlanded',
+    'b_avgsubatt','b_avgctrltime(seconds)','b_matchwcrank','b_pfprank'
+]
+
+# 2) Filtra per colonne esistenti:
+existing_cols = [col for col in desired_order if col in df.columns]
+
+# 3) Riordina il DataFrame:
+df = df[existing_cols]
+
+df.to_csv("df_common.csv",index = False)
+
+print(df['finish'].value_counts())
