@@ -2,24 +2,22 @@ import pandas as pd
 
 # Path to the CSV file
 file_path = '2010_2024.csv' #2010-2024
-
 df1 = pd.read_csv(file_path)
 
 file_path = '1994_2021.csv' #1994-2021
-
 df2 = pd.read_csv(file_path)
-
 
 df_events = pd.read_csv('completed_events_small.csv')
 df_events.drop('location',axis=1)
 
+
+# Column rename
 def rename_blue(col):
     if col.startswith("Blue"):
         new_col = col.replace("Blue", "B_", 1)
     else:
         new_col = col
     return new_col
-
 
 def rename_red(col):
     if col.startswith("Red"):
@@ -70,10 +68,10 @@ df2 = df2.rename(columns={'b_draw': 'b_draws', 'r_draw': 'r_draws','b_winbyko/tk
                           'b_winbydecisionunanimous': 'b_winsbydecisionunanimous',})
 
 
+# Sorting by date 
 df1 = df1.sort_values(by=["date","r_fighter"]).reset_index(drop=True)
 df2 = df2.sort_values(by=["date","r_fighter"]).reset_index(drop=True)
 
-df1.drop(columns=('country'))
 
 # Convertiamo tutte le colonne 'int' in float
 for col in df1.select_dtypes(include='int'):
@@ -181,6 +179,7 @@ df1 = df1[common1]
 common2 = [c for c in cols_to_keep if c in df2.columns]
 df2 = df2[common2]
 
+# Keeping only needed columns per each dataset before the merge
 
 col1 =['r_fighter', 'b_fighter', 'date', 'month', 'year', 'gender', 'location',
        'city', 'state', 'country', 'finish', 'finishdetails',
@@ -418,6 +417,8 @@ desired_order = [
     'b_avgsigstratt','b_avgsigstrlanded','b_avgtdatt','b_avgtdlanded',
     'b_avgsubatt','b_avgctrltime(seconds)','b_matchwcrank','b_pfprank'
 ]
+
+df = df.loc[:, ~df.columns.duplicated()]
 
 existing_cols = [col for col in desired_order if col in df.columns]
 

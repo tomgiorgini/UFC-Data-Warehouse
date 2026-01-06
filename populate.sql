@@ -85,6 +85,8 @@ ALTER TABLE public.staging_fight
 ALTER TABLE public.staging_fight
   ADD COLUMN stg_id SERIAL PRIMARY KEY;
 
+-- PSQL CODE TO POPULATE STAGING FIGHT: 
+--
 
 
 --CREATE TABLES--
@@ -123,7 +125,7 @@ CREATE TABLE public.dim_type (
 	numberofrounds INTEGER,
 	titlebout BOOLEAN,
 	emptyarena BOOLEAN
-)
+);
 
 --  dim_fighter
 CREATE TABLE  public.dim_fighter (
