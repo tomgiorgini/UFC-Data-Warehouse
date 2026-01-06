@@ -45,8 +45,6 @@ CREATE TABLE public.staging_fight (
   r_draws                    INTEGER,
   r_wins                     INTEGER,
   r_winsbydecisionmajority   INTEGER,
-  r_winsbydecisionunanimous  INTEGER,
-  r_winsbydecisionmajority   INTEGER,
   r_winsbydecisionsplit      INTEGER,
   r_winsbydecisionunanimous  INTEGER,
   r_winsbyko                 INTEGER,
@@ -56,8 +54,6 @@ CREATE TABLE public.staging_fight (
   b_losses                   INTEGER,
   b_draws                    INTEGER,
   b_wins                     INTEGER,
-  b_winsbydecisionmajority   INTEGER,
-  b_winsbydecisionunanimous  INTEGER,
   b_winsbydecisionmajority   INTEGER,
   b_winsbydecisionsplit      INTEGER,
   b_winsbydecisionunanimous  INTEGER,
@@ -102,7 +98,7 @@ CREATE TABLE public.dim_date (
 
 CREATE TABLE public.dim_event (
   event_key SERIAL PRIMARY KEY,
-  event     TEXT    NOT NULL UNIQUE,
+  event     TEXT    NOT NULL,
   date_key  INTEGER NOT NULL REFERENCES public.dim_date(date_key),
   location  TEXT,
   city      TEXT,
@@ -279,46 +275,15 @@ WHERE s.b_fighter IS NOT NULL;
 
 --FACT TABLE FIGHT CREATION
 
-CREATE TABLE public.fact_fight (
-  fight_key       SERIAL    PRIMARY KEY,
-  date_key        INTEGER   NOT NULL REFERENCES public.dim_date(date_key),
-  event_key       INTEGER   NOT NULL REFERENCES public.dim_event(event_key),
-  red_fighter_key   INTEGER NOT NULL REFERENCES public.dim_fighter(fighter_key),
-  blue_fighter_key  INTEGER NOT NULL REFERENCES public.dim_fighter(fighter_key),
-  winner_key      INTEGER   NOT NULL REFERENCES public.dim_winner(winner_key),
-  type_key        INTEGER NOT NULL REFERENCES public.dim_type(type_key),
-  referee         TEXT,
-  heightdif       REAL,
-  agedif          INTEGER,
-  reachdif        REAL,
-  r_odds          INTEGER,
-  b_odds          INTEGER,
-  r_avgkd         REAL,
-  b_avgkd         REAL,
-  r_avgsigstratt  REAL,
-  b_avgsigstratt  REAL,
-  r_avgsigstrlanded REAL,
-  b_avgsigstrlanded REAL,
-  r_avgtdatt      REAL,
-  b_avgtdatt      REAL,
-  r_avgtdlanded   REAL,
-  b_avgtdlanded   REAL,
-  r_avgsubatt     REAL,
-  b_avgsubatt     REAL,
-  r_avgctrltime   REAL,
-  b_avgctrltime   REAL
-);
-
-
 DROP TABLE IF EXISTS public.fact_fight;
 
--- 2) Re-create via CTAS, deduplicating on stg_id
 CREATE TABLE public.fact_fight AS
 WITH base AS (
   SELECT 
     s.stg_id,
     d.date_key,
     e.event_key,
+    t.type_key,                                -- ADDED
     s.referee,
     df_red.fighter_key   AS red_fighter_key,
     df_blue.fighter_key  AS blue_fighter_key,
@@ -343,23 +308,33 @@ WITH base AS (
     s."r_avgctrltime(seconds)" AS r_avgctrltime,
     s."b_avgctrltime(seconds)" AS b_avgctrltime
   FROM public.staging_fight s
-    JOIN public.dim_date    d      ON d.date    = s.date
-    JOIN public.dim_event   e      ON e.event   = s.event
-                               AND e.date_key = d.date_key
-    JOIN public.dim_fighter df_red  ON df_red.fighter = s.r_fighter
-    JOIN public.dim_fighter df_blue ON df_blue.fighter = s.b_fighter
-    JOIN public.dim_winner  dw     ON dw.stg_id  = s.stg_id
+  JOIN public.dim_date d
+    ON d.date = s.date
+  JOIN public.dim_event e
+    ON e.event = s.event
+   AND e.date_key = d.date_key
+  JOIN public.dim_type t                          -- ADDED
+    ON t.weightclass    IS NOT DISTINCT FROM s.weightclass
+   AND t.numberofrounds IS NOT DISTINCT FROM s.numberofrounds
+   AND t.titlebout      IS NOT DISTINCT FROM s.titlebout
+   AND t.emptyarena     IS NOT DISTINCT FROM s.emptyarena
+  JOIN public.dim_fighter df_red
+    ON df_red.fighter = s.r_fighter
+  JOIN public.dim_fighter df_blue
+    ON df_blue.fighter = s.b_fighter
+  JOIN public.dim_winner dw
+    ON dw.stg_id = s.stg_id
   WHERE s.winner IS NOT NULL
-  ORDER BY s.stg_id           -- required by DISTINCT ON
 )
 SELECT
   ROW_NUMBER() OVER (ORDER BY stg_id) AS fight_key,
   date_key,
   event_key,
-  referee,
   red_fighter_key,
   blue_fighter_key,
   winner_key,
+  type_key,                                     -- ADDED
+  referee,
   heightdif,
   agedif,
   reachdif,
@@ -381,7 +356,8 @@ SELECT
   b_avgctrltime
 FROM (
   SELECT DISTINCT ON (stg_id)
-    * 
+    *
   FROM base
+  ORDER BY stg_id
 ) dedup
 ORDER BY fight_key;
