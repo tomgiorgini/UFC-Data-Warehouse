@@ -86,7 +86,7 @@ ALTER TABLE public.staging_fight
   ADD COLUMN stg_id SERIAL PRIMARY KEY;
 
 -- PSQL CODE TO POPULATE STAGING FIGHT: 
---
+--\copy public.staging_fight(r_fighter,b_fighter,event,date,month,year,gender,location,city,state,country,referee,winner,finish,finishdetails,finishround,totalfighttimesecs,titlebout,weightclass,numberofrounds,emptyarena,heightdif,agedif,reachdif,r_odds,r_age,r_stance,r_heightcms,r_reachcms,r_weightlbs,b_odds,b_age,b_stance,b_heightcms,b_reachcms,b_weightlbs,r_record,r_losses,r_draws,r_wins,r_winsbydecisionmajority,r_winsbydecisionsplit,r_winsbydecisionunanimous,r_winsbyko,r_winsbysubmission,r_winsbytkodoctorstoppage,b_record,b_losses,b_draws,b_wins,b_winsbydecisionmajority,b_winsbydecisionsplit,b_winsbydecisionunanimous,b_winsbyko,b_winsbysubmission,b_winsbytkodoctorstoppage,r_avgkd,r_avgsigstratt,r_avgsigstrlanded,r_avgtdatt,r_avgtdlanded,r_avgsubatt,"r_avgctrltime(seconds)",r_matchwcrank,r_pfprank,b_avgkd,b_avgsigstratt,b_avgsigstrlanded,b_avgtdatt,b_avgtdlanded,b_avgsubatt,"b_avgctrltime(seconds)",b_matchwcrank,b_pfprank) FROM '/Users/tommaso/Documents/GitHub/Progetto-DM/df_common.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',', QUOTE '"');
 
 
 --CREATE TABLES--

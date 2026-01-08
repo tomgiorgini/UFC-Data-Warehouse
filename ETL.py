@@ -1,17 +1,19 @@
 import pandas as pd
 
-# Path to the CSV file
-file_path = '2010_2024.csv' #2010-2024
+# Path to the CSV files
+
+file_path = 'd1.csv' #2010-2024
 df1 = pd.read_csv(file_path)
 
-file_path = '1994_2021.csv' #1994-2021
+file_path = 'd2.csv' #1994-2021
 df2 = pd.read_csv(file_path)
 
-df_events = pd.read_csv('completed_events_small.csv')
+df_events = pd.read_csv('d3.csv') #For the event name
 df_events.drop('location',axis=1)
 
+#################################################
+# Column Renaming procedure - Integration
 
-# Column rename
 def rename_blue(col):
     if col.startswith("Blue"):
         new_col = col.replace("Blue", "B_", 1)
@@ -38,12 +40,12 @@ df1 = df1.rename(columns=lambda x: rename_blue(x))
 df1 = df1.rename(columns=lambda x: rename_red(x))
 df1 = df1.rename(columns=lambda x: add_underscore(x))
 
-def custom_normalize(col_name):
+def normalize(col_name):
     col_name = col_name.lower()
     
     if col_name.startswith('r_') or col_name.startswith('b_'):
         prefix = col_name[:2]          # 'r_' o 'b_'
-        rest = col_name[2:]           # il resto, es. 'height_cms'
+        rest = col_name[2:]           #es. 'height_cms'
         rest_no_underscores = rest.replace('_', '')  # 'heightcms'
         return prefix + rest_no_underscores          # 'r_heightcms'
     else:
@@ -52,28 +54,33 @@ def custom_normalize(col_name):
 df1.columns = [col.lower() for col in df1.columns]
 df2.columns = [col.lower() for col in df2.columns]
 
-df1 = df1.rename(columns=lambda x: custom_normalize(x))
-df2 = df2.rename(columns=lambda x: custom_normalize(x))
+df1 = df1.rename(columns=lambda x: normalize(x))
+df2 = df2.rename(columns=lambda x: normalize(x))
 
-df2 = df2.rename(columns={'b_draw': 'b_draws', 'r_draw': 'r_draws','b_winbyko/tko':'b_winsbyko'
-                          ,'r_winbyko/tko':'r_winsbyko', 'b_winbytkodoctorstoppage': 'b_winsbytkodoctorstoppage',
-                          'r_winbytkodoctorstoppage': 'r_winsbytkodoctorstoppage',
-                          'b_winbysubmission': 'b_winsbysubmission',
-                          'r_winbysubmission': 'r_winsbysubmission',
-                          'r_winbydecisionsplit': 'r_winsbydecisionsplit',
-                          'b_winbydecisionsplit': 'b_winsbydecisionsplit',
-                          'r_winbydecisionmajority':'r_winsbydecisionmajority' , 
-                          'r_winbydecisionunanimous':'r_winsbydecisionunanimous' ,
-                          'b_winbydecisionmajority': 'b_winsbydecisionmajority', 
-                          'b_winbydecisionunanimous': 'b_winsbydecisionunanimous',})
+df2 = df2.rename(
+    columns={'b_draw': 'b_draws', 'r_draw': 'r_draws',
+            'b_winbyko/tko':'b_winsbyko','r_winbyko/tko':'r_winsbyko', 
+            'r_winbytkodoctorstoppage': 'r_winsbytkodoctorstoppage',
+            'b_winbytkodoctorstoppage': 'b_winsbytkodoctorstoppage',
+            'r_winbysubmission': 'r_winsbysubmission',
+            'b_winbysubmission': 'b_winsbysubmission',
+            'r_winbydecisionsplit': 'r_winsbydecisionsplit',
+            'b_winbydecisionsplit': 'b_winsbydecisionsplit',
+            'r_winbydecisionmajority':'r_winsbydecisionmajority',
+            'b_winbydecisionmajority': 'b_winsbydecisionmajority', 
+            'r_winbydecisionunanimous':'r_winsbydecisionunanimous' ,
+            'b_winbydecisionunanimous': 'b_winsbydecisionunanimous',})
 
+##############################################################
+
+# Date and Location columns operations
 
 # Sorting by date 
 df1 = df1.sort_values(by=["date","r_fighter"]).reset_index(drop=True)
 df2 = df2.sort_values(by=["date","r_fighter"]).reset_index(drop=True)
 
 
-# Convertiamo tutte le colonne 'int' in float
+# Change all int columns in float
 for col in df1.select_dtypes(include='int'):
     df1[col] = df1[col].astype(float)
     
@@ -85,7 +92,7 @@ for col in df2.select_dtypes(include='object'):
 df1 = df1.round(2)
 df2 = df2.round(2)
 
-# Converti le date in datetime
+# Convert date in datetime
 df1['date'] = pd.to_datetime(df1['date'], errors='coerce')
 df2['date'] = pd.to_datetime(df2['date'], errors='coerce')
 
@@ -115,10 +122,10 @@ mask = parts['country'].isna() & parts['state'].notna()
 parts.loc[mask, 'country'] = parts.loc[mask, 'state']
 parts.loc[mask, 'state'] = ''
 
-# Elimina le colonne city, state, country da df1 se già esistono
+# Deleting pre-existing city, state, country columns from df1 if they exists
 df1 = df1.drop(columns=['city','state','country'], errors='ignore')
 
-#Unisci le tre colonne nuove
+#join the three new columns
 df1 = df1.join(parts[['city','state','country']])
 
 df2['month'] = df2['date'].dt.month
@@ -134,7 +141,7 @@ df2['r_record'] = (
     df2['r_draws'].astype(str)
 )
 
-# Stessa preparazione di parts
+# Same for df2
 parts = df2['location'].str.split(',', n=2, expand=True)
 parts = parts.apply(lambda col: col.str.strip())
 parts.columns = ['city','state','country']
@@ -143,12 +150,13 @@ mask = parts['country'].isna() & parts['state'].notna()
 parts.loc[mask, 'country'] = parts.loc[mask, 'state']
 parts.loc[mask, 'state'] = ''
 
-# Elimina le colonne city, state, country da df2 se già esistono
 df2 = df2.drop(columns=['city','state','country'], errors='ignore')
 
-# Unisci le tre colonne nuove
 df2 = df2.join(parts[['city','state','country']])
 
+
+########################################################
+#Filtering for columns needed for the two main datasets
 
 cols_to_keep = ['r_fighter','b_fighter', 'event','date','month','year', 'gender', 'location', 
     'city','state', 'country', 'referee', 'winner', 'finish', 'finishdetails','finishround',
@@ -203,6 +211,8 @@ col2 = ['r_fighter', 'b_fighter', 'date', 'referee', 'winner',
 df1= df1[col1]
 df2= df2[col2]
 
+########################################################
+
 # check for fighter that are in the blue corner in one dataset and in the red one in the other dataset
 def find_swapped_between(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
     a = df1[["date", "r_fighter", "b_fighter"]].copy().reset_index(names="df1_row")
@@ -254,11 +264,11 @@ def swap_red_blue_rows_df2(df2: pd.DataFrame, df2_rows: list[int]) -> pd.DataFra
 cross = find_swapped_between(df1, df2)
 #print(cross.head(50))
 
-#result of the finding
+#result of the finding + swap
 rows_to_fix = [5413, 5516, 5557, 5562, 5564, 5561]
 df2 = swap_red_blue_rows_df2(df2, rows_to_fix)
 
-
+########################################################
 
 # Check for fighters who are named differently in the two datasets
 def partial_matches(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
@@ -312,30 +322,33 @@ def force_df2_names_from_df1(df2: pd.DataFrame, mism: pd.DataFrame) -> pd.DataFr
 mism = partial_matches(df1, df2)
 df2 = force_df2_names_from_df1(df2, mism)
 
-
 ###################################################
 #MERGE OPERATION
 
 key_cols = ['r_fighter', 'b_fighter', 'date']
 
-df1.to_csv("df_10_24_up.csv",index = False)
-df2.to_csv("df_94_21_up.csv",index = False)
+df1.to_csv("d1_post_ETL.csv",index = False)
+df2.to_csv("d2_post_ETL.csv",index = False)
 
 df = pd.merge(df1, df2, how='outer', on=key_cols)
 df = df.sort_values(by=['date','r_fighter']).reset_index(drop=True)
 df_events['date'] = pd.to_datetime(df_events['date'])
 df = df.merge(df_events[['date','event']], on =['date'], how = 'left')
-##################################################
 
-# Cleaning the results: we need to have a winner and a location
+##################################################
+# Cleaning the results
+
+# we need to have a winner and a location: These are NULL if the fight did not happened, but was in the fight list
 df = df.dropna(subset=['winner'])
 df = df.dropna(subset=['location'])
 
-#Computing dif red-blue
+#Computing physical attribute differences red-blue
 df['heightdif'] = round(df['r_heightcms'] - df['b_heightcms'],2)
 df['reachdif'] = round(df['r_reachcms'] - df['b_reachcms'],2)
 df['agedif'] = round(df['r_age'] - df['b_age'],2)
 
+###########################################################
+# Columns typing and management of null values
 
 # Integer columns
 int_cols = [
@@ -362,15 +375,15 @@ avg_cols = [c for c in df.columns if c.startswith(('r_avg','b_avg'))]
 df[avg_cols] = df[avg_cols].fillna(0)
 
 
-pd.set_option('display.max_rows', None)
-pd.set_option('display.max_columns', None)
-
 #check for null values counts in each column
 null_counts = df.isna().sum().reset_index()
 null_counts.columns = ['column', 'null_count']
 #print(null_counts)
 
+###################################################
+#Check for duplicates produced by the merge operation
 
+#There is no fighter with 2 fights on the same date
 def fighter_date_duplicate_row_pairs(df: pd.DataFrame) -> pd.DataFrame:
     x = df[["date", "r_fighter", "b_fighter"]].copy()
     x = x.reset_index(names="row_id")
@@ -393,11 +406,12 @@ def fighter_date_duplicate_row_pairs(df: pd.DataFrame) -> pd.DataFrame:
         .sort_values(["date", "fighter", "row_id_1", "row_id_2"])
         .reset_index(drop=True)
     )
-#Check for duplicates
+
 pairs = fighter_date_duplicate_row_pairs(df)
 #print(pairs.head(1000))
 
-
+###################################################
+# Ordering
 desired_order = [
     'r_fighter','b_fighter','event','date','month','year','gender',
     'location','city','state','country','referee','winner','finish',
@@ -418,10 +432,9 @@ desired_order = [
     'b_avgsubatt','b_avgctrltime(seconds)','b_matchwcrank','b_pfprank'
 ]
 
+#some columns are duplicated
 df = df.loc[:, ~df.columns.duplicated()]
 
-existing_cols = [col for col in desired_order if col in df.columns]
-
-#Riordina il DataFrame
-df = df[existing_cols]
+#Reorder and print in csv the final dataset
+df = df[desired_order]
 df.to_csv("df_common.csv",index = False)
