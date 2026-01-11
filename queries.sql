@@ -1,122 +1,288 @@
 /* ============================================================
-   Q1 — ROLL-UP: Year → Month → Total
-   Show how fight pace and grappling intensity evolve over time.
-   Measures: avg total sig-strike attempts, avg total takedown attempts, fights count.
+   ANALYSIS 1
    ============================================================ */
+
+-- Q1 PER-FIGHT TABLE 
+DROP TABLE IF EXISTS tmp_a2_upset_per_fight;
+
+CREATE TEMP TABLE tmp_a2_upset_per_fight AS
 SELECT
-  CASE WHEN GROUPING(d.year)  = 1 THEN 'ALL' ELSE d.year::text  END AS year,
-  CASE WHEN GROUPING(d.month) = 1 THEN 'ALL' ELSE d.month::text END AS month,
-  COUNT(*) AS fights,
-  ROUND(AVG(f.r_avgsigstratt + f.b_avgsigstratt)::numeric, 1) AS avg_total_sig_att,
-  ROUND(AVG(f.r_avgtdatt     + f.b_avgtdatt)::numeric, 2)     AS avg_total_td_att
-FROM public.fact_fight f
-JOIN public.dim_date d on d.date_key = f.date_key
-GROUP BY ROLLUP (d.year, d.month)
-ORDER BY d.year, d.month;
-
-
-
-/* ============================================================
-   Q2 — DRILL-DOWN: Weightclass × Scheduled rounds
-   Compare fight pace by bout type (weight class) and format (3 vs 5 rounds).
-   Measures: avg total sig-strike attempts, avg total control time, fights count.
-   ============================================================ */
-SELECT
-  t.weightclass,
+  e.country,
+  e.state,
   t.numberofrounds,
-  COUNT(*) AS fights,
-  ROUND(AVG(f.r_avgsigstratt + f.b_avgsigstratt)::numeric, 1) AS avg_total_sig_att,
-  ROUND(AVG(f.r_avgctrltime  + f.b_avgctrltime)::numeric, 1)  AS avg_total_ctrl_time
+  f.winner,
+  f.r_odds,
+  f.b_odds,
+  CASE
+    WHEN f.r_odds > f.b_odds THEN 'Red'
+    WHEN f.b_odds > f.r_odds THEN 'Blue'
+    ELSE NULL
+  END AS underdog_side,
+  CASE
+    WHEN (f.r_odds > f.b_odds AND f.winner = 'Red')  THEN 1
+    WHEN (f.b_odds > f.r_odds AND f.winner = 'Blue') THEN 1
+    ELSE 0
+  END AS is_upset
 FROM public.fact_fight f
-JOIN public.dim_type t on t.type_key = f.type_key
-GROUP BY t.weightclass, t.numberofrounds
-ORDER BY t.weightclass, t.numberofrounds;
+JOIN public.dim_event e ON e.event_key = f.event_key
+JOIN public.dim_type  t ON t.type_key  = f.type_key
+WHERE f.winner IN ('Red','Blue')
+  AND f.r_odds IS NOT NULL
+  AND f.b_odds IS NOT NULL
+  AND f.r_odds <> f.b_odds;
 
+
+SELECT *
+FROM tmp_a2_upset_per_fight
+ORDER BY country, numberofrounds;
+
+
+
+-- Q2 ROLL-UP on country and numberofrounds
+DROP TABLE IF EXISTS tmp_a2_upset_rollup;
+
+CREATE TEMP TABLE tmp_a2_upset_rollup AS
+SELECT
+  COALESCE(country, 'ALL') AS country,
+  COALESCE(numberofrounds::text, 'ALL') AS numberofrounds,
+  COUNT(*) AS fights,
+  SUM(is_upset) AS upset_count,
+  ROUND(100.0 * SUM(is_upset)::numeric / NULLIF(COUNT(*),0), 2) AS upset_pct
+FROM tmp_a2_upset_per_fight
+GROUP BY ROLLUP (country, numberofrounds)
+ORDER BY country, numberofrounds;
+
+
+SELECT *
+FROM tmp_a2_upset_rollup
+ORDER BY country, numberofrounds;
+
+-- Q3 PIVOT 
+DROP TABLE IF EXISTS tmp_a2_upset_pivot;
+
+CREATE TEMP TABLE tmp_a2_upset_pivot AS
+SELECT
+  country,
+  COUNT(*) FILTER (WHERE numberofrounds = 3) AS fights_3r,
+  ROUND(
+    100.0 * SUM(is_upset) FILTER (WHERE numberofrounds = 3)::numeric
+    / NULLIF(COUNT(*) FILTER (WHERE numberofrounds = 3), 0)
+  , 2) AS upset_pct_3r,
+
+  COUNT(*) FILTER (WHERE numberofrounds = 5) AS fights_5r,
+  ROUND(
+    100.0 * SUM(is_upset) FILTER (WHERE numberofrounds = 5)::numeric
+    / NULLIF(COUNT(*) FILTER (WHERE numberofrounds = 5), 0)
+  , 2) AS upset_pct_5r
+FROM tmp_a2_upset_per_fight
+GROUP BY country
+HAVING COUNT(*) >= 30
+ORDER BY (COUNT(*)) DESC;
+
+
+SELECT *
+FROM tmp_a2_upset_pivot
+ORDER BY (fights_3r + fights_5r) DESC;
+
+
+
+/* =====================================================================
+   ANALYSIS 2
+   ===================================================================== */
+
+-- Q1 APPEARANCES TABLE 
+DROP TABLE IF EXISTS tmp_a3_appearances;
+
+CREATE TEMP TABLE tmp_a3_appearances AS
+SELECT
+  d.year,
+  'R'::text AS corner,
+  fr.fighter_name AS fighter,
+  fr.age_range,
+  CASE
+    WHEN fr.champion THEN 'Champion'
+    WHEN (fr.wc_ranked OR fr.pfp_ranked) THEN 'Ranked'
+    ELSE 'Unranked'
+  END AS rank_status,
+  CASE
+    WHEN fr.stance IN ('Orthodox','Southpaw','Switch') THEN fr.stance
+    WHEN fr.stance IS NULL OR fr.stance = '' THEN 'Unknown'
+    ELSE 'Other'
+  END AS stance_group,
+  f.r_avgsigstratt AS sig_att,
+  f.r_avgctrltime  AS ctrl_time
+FROM public.fact_fight f
+JOIN public.dim_date d     ON d.date_key = f.date_key
+JOIN public.dim_fighter fr ON fr.fighter_key = f.red_fighter_key
+
+UNION ALL
+
+SELECT
+  d.year,
+  'B'::text AS corner,
+  fb.fighter_name AS fighter,
+  fb.age_range,
+  CASE
+    WHEN fb.champion THEN 'Champion'
+    WHEN (fb.wc_ranked OR fb.pfp_ranked) THEN 'Ranked'
+    ELSE 'Unranked'
+  END AS rank_status,
+  CASE
+    WHEN fb.stance IN ('Orthodox','Southpaw','Switch') THEN fb.stance
+    WHEN fb.stance IS NULL OR fb.stance = '' THEN 'Unknown'
+    ELSE 'Other'
+  END AS stance_group,
+  f.b_avgsigstratt AS sig_att,
+  f.b_avgctrltime  AS ctrl_time
+FROM public.fact_fight f
+JOIN public.dim_date d     ON d.date_key = f.date_key
+JOIN public.dim_fighter fb ON fb.fighter_key = f.blue_fighter_key;
+
+SELECT *
+FROM tmp_a3_appearances
+ORDER BY year, rank_status, age_range, stance_group
+LIMIT 25;
+
+
+-- Q2 ROLL-UP (rank_status) with totals
+DROP TABLE IF EXISTS tmp_a3_rollup;
+
+CREATE TEMP TABLE tmp_a3_rollup AS
+SELECT
+  CASE WHEN GROUPING(rank_status)=1 THEN 'ALL' ELSE rank_status END AS rank_status,
+  COUNT(*) AS appearances,
+  ROUND(AVG(sig_att)::numeric, 1)   AS avg_sig_att,
+  ROUND(AVG(ctrl_time)::numeric, 1) AS avg_ctrl_time
+FROM tmp_a3_appearances
+GROUP BY ROLLUP (rank_status);
+
+SELECT *
+FROM tmp_a3_rollup
+ORDER BY (rank_status='ALL')::int, rank_status;
+
+-- Q3 PIVOT by stance for the most relevant rank segments 
+DROP TABLE IF EXISTS tmp_a3_stance_pivot_final;
+
+CREATE TEMP TABLE tmp_a3_stance_pivot_final AS
+SELECT
+  a.rank_status,
+  COUNT(*) AS appearances,
+  ROUND((AVG(a.sig_att) FILTER (WHERE a.stance_group='Orthodox'))::numeric, 1) AS orthodox_avg_sig_att,
+  ROUND((AVG(a.sig_att) FILTER (WHERE a.stance_group='Southpaw'))::numeric, 1) AS southpaw_avg_sig_att,
+  ROUND((AVG(a.sig_att) FILTER (WHERE a.stance_group='Switch'))::numeric, 1)   AS switch_avg_sig_att,
+  ROUND((AVG(a.ctrl_time) FILTER (WHERE a.stance_group='Orthodox'))::numeric, 1) AS orthodox_avg_ctrl_time,
+  ROUND((AVG(a.ctrl_time) FILTER (WHERE a.stance_group='Southpaw'))::numeric, 1) AS southpaw_avg_ctrl_time,
+  ROUND((AVG(a.ctrl_time) FILTER (WHERE a.stance_group='Switch'))::numeric, 1)   AS switch_avg_ctrl_time
+  
+FROM tmp_a3_appearances a
+WHERE a.rank_status IN (
+  SELECT rank_status
+  FROM tmp_a3_rollup
+  WHERE rank_status <> 'ALL'
+)
+GROUP BY a.rank_status;
+
+SELECT *
+FROM tmp_a3_stance_pivot_final
+ORDER BY appearances DESC, rank_status;
 
 /* ============================================================
-   Q3 — SLICE/DICE: Finish category
-   Summarize fight outcomes and relate them to duration.
-   Measures: fights count, avg duration (secs).
+   ANALYSIS 3
    ============================================================ */
+
+-- Q1 Base table with winner-oriented diffs 
+DROP TABLE IF EXISTS tmp_a4_base;
+
+CREATE TEMP TABLE tmp_a4_base AS
+SELECT
+  f.winner,
+  df.finish,
+  df.finishdetails,
+
+  -- winner-oriented diffs
+  CASE WHEN f.winner = 'Blue' THEN -1 * f.heightdif ELSE f.heightdif END AS win_heightdif,
+  CASE WHEN f.winner = 'Blue' THEN -1 * f.agedif    ELSE f.agedif    END AS win_agedif,
+  CASE WHEN f.winner = 'Blue' THEN -1 * f.reachdif  ELSE f.reachdif  END AS win_reachdif,
+
+  -- measure (total volume)
+  (COALESCE(f.r_avgsigstratt,0) + COALESCE(f.b_avgsigstratt,0)) AS total_sig_att
+
+FROM public.fact_fight f
+JOIN public.dim_finish df ON df.finish_key = f.finish_key
+WHERE f.winner IN ('Red','Blue');
+
+SELECT *
+FROM tmp_a4_base
+LIMIT 25;
+
+
+-- Q2 ROLL-UP by finish 
+DROP TABLE IF EXISTS tmp_a4_finish_rollup;
+
+CREATE TEMP TABLE tmp_a4_finish_rollup AS
 SELECT
   CASE
-    WHEN w.finish IN ('M-DEC','U-DEC','S-DEC') THEN 'Decision'
-    WHEN w.finish = 'KO/TKO'                  THEN 'KO/TKO'
-    WHEN w.finish = 'SUB'                     THEN 'Submission'
+    WHEN finish IN ('M-DEC','U-DEC','S-DEC') THEN 'Decision'
+    WHEN finish = 'KO/TKO'                  THEN 'KO/TKO'
+    WHEN finish = 'SUB'                     THEN 'Submission'
     ELSE 'Other'
   END AS finish_category,
+
   COUNT(*) AS fights,
-  ROUND(AVG(w.totalfighttimesecs)::numeric, 0) AS avg_duration_secs
-FROM public.fact_fight f
-JOIN public.dim_winner w on w.winner_key = f.winner_key
-GROUP BY finish_category
+  ROUND(AVG(win_heightdif)::numeric, 2) AS avg_win_heightdif,
+  ROUND(AVG(win_agedif)::numeric, 2)    AS avg_win_agedif,
+  ROUND(AVG(win_reachdif)::numeric, 2)  AS avg_win_reachdif,
+  ROUND(AVG(total_sig_att)::numeric, 1) AS avg_total_sig_att
+
+FROM tmp_a4_base
+GROUP BY finish_category;
+
+SELECT *
+FROM tmp_a4_finish_rollup
 ORDER BY fights DESC;
 
 
-/* ============================================================
-   Q4 — SLICE: Year, DRILL-DOWN: Country → Event
-   Compare activity by geography and event, limited to one year.
-   Measures: fights count, avg total takedown attempts.
-   ============================================================ */
+-- Q3 SLICE & DICE on KO/TKO + DRILL-DOWN on non-null finishdetails
+DROP TABLE IF EXISTS tmp_a4_ko_details_drilldown;
+
+CREATE TEMP TABLE tmp_a4_ko_details_drilldown AS
 SELECT
-  e.country,
-  e.event,
+  finishdetails,
   COUNT(*) AS fights,
-  ROUND(AVG(f.r_avgtdatt + f.b_avgtdatt)::numeric, 2) AS avg_total_td_att
-FROM public.fact_fight f
-JOIN public.dim_event e ON e.event_key = f.event_key
-JOIN public.dim_date  d ON d.date_key  = f.date_key
-WHERE d.year = 2019
-GROUP BY e.country, e.event
-ORDER BY e.country, fights DESC;
+  ROUND(AVG(win_heightdif)::numeric, 2) AS avg_win_heightdif,
+  ROUND(AVG(win_agedif)::numeric, 2)    AS avg_win_agedif,
+  ROUND(AVG(win_reachdif)::numeric, 2)  AS avg_win_reachdif,
+  ROUND(AVG(total_sig_att)::numeric, 1) AS avg_total_sig_att
+FROM tmp_a4_base
+WHERE finish = 'KO/TKO'                 -- SLICE
+  AND finishdetails IS NOT NULL         -- DICE 
+  AND finishdetails <> ''
+GROUP BY finishdetails                -- DRILL-DOWN level
+HAVING count(*) >= 5;
 
-/* ============================================================
-   Q5 — Roll-up by Stance
-   Show how fighter style (stance) relates to striking volume.
-   Measures: appearances count (red+blue), avg sig-strike attempts 
-   per appearance.
-   ============================================================ */
+SELECT *
+FROM tmp_a4_ko_details_drilldown
+ORDER BY fights DESC, finishdetails;
+
+-- 2nd version with SUM
+DROP TABLE IF EXISTS tmp_a4_sub_details_drilldown;
+
+CREATE TEMP TABLE tmp_a4_sub_details_drilldown AS
 SELECT
-  CASE WHEN GROUPING(x.stance)=1 THEN 'ALL' ELSE COALESCE(x.stance, 'Unknown') END AS stance,
-  COUNT(*) AS appearances,
-  ROUND(AVG(x.sig_att)::numeric, 1) AS avg_sig_att
-FROM (
-  SELECT fr.stance, f.r_avgsigstratt AS sig_att
-  FROM public.fact_fight f
-  JOIN public.dim_fighter fr ON fr.fighter_key = f.red_fighter_key
-  UNION ALL
-  SELECT fb.stance, f.b_avgsigstratt AS sig_att
-  FROM public.fact_fight f
-  JOIN public.dim_fighter fb ON fb.fighter_key = f.blue_fighter_key
-) x
-GROUP BY ROLLUP (x.stance)
-ORDER BY x.stance;
+  finishdetails,
+  COUNT(*) AS fights,
+  ROUND(AVG(win_heightdif)::numeric, 2) AS avg_win_heightdif,
+  ROUND(AVG(win_agedif)::numeric, 2)    AS avg_win_agedif,
+  ROUND(AVG(win_reachdif)::numeric, 2)  AS avg_win_reachdif,
+  ROUND(AVG(total_sig_att)::numeric, 1) AS avg_total_sig_att
+FROM tmp_a4_base
+WHERE finish = 'SUB'                    -- SLICE (only submissions)
+  AND finishdetails IS NOT NULL         -- DICE (keep meaningful details)
+  AND finishdetails <> ''
+GROUP BY finishdetails                  -- DRILL-DOWN 
+HAVING COUNT(*) >= 5;
 
-
-/* ============================================================
-   Q6 — Top fighters by Control Time (slice: Year)
-   Identify fighters who accumulate more control time from a given year.
-   Measures: appearances count (red+blue), avg control time per appearance.
-   ============================================================ */
-WITH appearances AS (
-  SELECT d.year, fr.fighter, f.r_avgctrltime AS ctrl_time
-  FROM public.fact_fight f
-  JOIN public.dim_date d ON d.date_key = f.date_key
-  JOIN public.dim_fighter fr ON fr.fighter_key = f.red_fighter_key
-  UNION ALL
-  SELECT d.year, fb.fighter, f.b_avgctrltime AS ctrl_time
-  FROM public.fact_fight f
-  JOIN public.dim_date d ON d.date_key = f.date_key
-  JOIN public.dim_fighter fb ON fb.fighter_key = f.blue_fighter_key
-)
-SELECT
-  fighter,
-  COUNT(*) AS appearances,
-  ROUND(AVG(ctrl_time)::numeric, 1) AS avg_ctrl_time
-FROM appearances
-WHERE year >= 2018
-GROUP BY fighter
-HAVING COUNT(*) >= 3
-ORDER BY avg_ctrl_time DESC
-LIMIT 10;
+SELECT *
+FROM tmp_a4_sub_details_drilldown
+ORDER BY fights DESC, finishdetails;
 

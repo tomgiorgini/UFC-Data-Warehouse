@@ -1,5 +1,5 @@
 import pandas as pd
-
+import numpy as np
 # Path to the CSV files
 
 file_path = 'd1.csv' #2010-2024
@@ -57,157 +57,97 @@ df2.columns = [col.lower() for col in df2.columns]
 df1 = df1.rename(columns=lambda x: normalize(x))
 df2 = df2.rename(columns=lambda x: normalize(x))
 
-df2 = df2.rename(
-    columns={'b_draw': 'b_draws', 'r_draw': 'r_draws',
-            'b_winbyko/tko':'b_winsbyko','r_winbyko/tko':'r_winsbyko', 
-            'r_winbytkodoctorstoppage': 'r_winsbytkodoctorstoppage',
-            'b_winbytkodoctorstoppage': 'b_winsbytkodoctorstoppage',
-            'r_winbysubmission': 'r_winsbysubmission',
-            'b_winbysubmission': 'b_winsbysubmission',
-            'r_winbydecisionsplit': 'r_winsbydecisionsplit',
-            'b_winbydecisionsplit': 'b_winsbydecisionsplit',
-            'r_winbydecisionmajority':'r_winsbydecisionmajority',
-            'b_winbydecisionmajority': 'b_winsbydecisionmajority', 
-            'r_winbydecisionunanimous':'r_winsbydecisionunanimous' ,
-            'b_winbydecisionunanimous': 'b_winsbydecisionunanimous',})
-
 ##############################################################
 
 # Date and Location columns operations
 
-# Sorting by date 
-df1 = df1.sort_values(by=["date","r_fighter"]).reset_index(drop=True)
-df2 = df2.sort_values(by=["date","r_fighter"]).reset_index(drop=True)
+start_date = pd.Timestamp("2010-03-21")
+end_date   = pd.Timestamp("2021-03-20")
 
+def add_age_group(df: pd.DataFrame, col_age: str, out_col: str) -> pd.DataFrame:
+    age = pd.to_numeric(df[col_age], errors="coerce")
+    start = ((age - 1) // 5) * 5 + 1
+    end   = start + 4
+    df[out_col] = np.where(
+        age.notna(),
+        start.astype("Int64").astype(str) + "-" + end.astype("Int64").astype(str),
+        pd.NA
+    )
+    return df
 
-# Change all int columns in float
-for col in df1.select_dtypes(include='int'):
-    df1[col] = df1[col].astype(float)
+def preprocess(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.sort_values(["date", "r_fighter"]).reset_index(drop=True)
+
+    # safer: catch both numpy ints and pandas nullable ints
+    int_like_cols = df.select_dtypes(include=["int", "Int64", "int64"]).columns
+    df[int_like_cols] = df[int_like_cols].astype(float)
+
+    obj_cols = df.select_dtypes(include=["object"]).columns
+    df[obj_cols] = df[obj_cols].fillna("").astype(str)
+
+    df = df.round(2)
+
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df["month"] = df["date"].dt.month
+    df["year"]  = df["date"].dt.year
+
+    parts = df["location"].astype(str).str.split(",", n=2, expand=True).apply(lambda c: c.str.strip())
+    parts.columns = ["city", "state", "country"]
+    mask = parts["country"].isna() & parts["state"].notna()
+    parts.loc[mask, "country"] = parts.loc[mask, "state"]
+    parts.loc[mask, "state"] = ""
+
+    df = df.drop(columns=["city", "state", "country"], errors="ignore").join(parts)
+
+    df["r_undefeated"] = pd.to_numeric(df["r_losses"], errors="coerce").fillna(0).eq(0)
+    df["b_undefeated"] = pd.to_numeric(df["b_losses"], errors="coerce").fillna(0).eq(0)
+
+    df = add_age_group(df, "r_age", "r_age_range")
+    df = add_age_group(df, "b_age", "b_age_range")
+
+    df = df[(df["date"] >= start_date) & (df["date"] <= end_date)].copy()
+    df['heightdif'] = round(df['r_heightcms'] - df['b_heightcms'],2)
+    df['reachdif'] = round(df['r_reachcms'] - df['b_reachcms'],2)
+    df['agedif'] = round(df['r_age'] - df['b_age'],2)
+
     
-for col in df1.select_dtypes(include='object'):
-    df1[col] = df1[col].fillna('').astype(str)
-for col in df2.select_dtypes(include='object'):
-    df2[col] = df2[col].fillna('').astype(str)
-    
-df1 = df1.round(2)
-df2 = df2.round(2)
 
-# Convert date in datetime
-df1['date'] = pd.to_datetime(df1['date'], errors='coerce')
-df2['date'] = pd.to_datetime(df2['date'], errors='coerce')
+    return df
 
-start_date = '2010-03-21'
-end_date   = '2021-03-20'
-
-# Operation for date and location columns/subcolumns
-
-df1['month'] = df1['date'].dt.month
-df1['year'] = df1['date'].dt.year
-df1['b_record'] = (
-    df1['b_wins'].astype(str) + '-' +
-    df1['b_losses'].astype(str) + '-' +
-    df1['b_draws'].astype(str)
-)
-df1['r_record'] = (
-    df1['r_wins'].astype(str) + '-' +
-    df1['r_losses'].astype(str) + '-' +
-    df1['r_draws'].astype(str)
-)
-
-parts = df1['location'].str.split(',', n=2, expand=True)
-parts = parts.apply(lambda col: col.str.strip())
-parts.columns = ['city','state','country']
-
-mask = parts['country'].isna() & parts['state'].notna()
-parts.loc[mask, 'country'] = parts.loc[mask, 'state']
-parts.loc[mask, 'state'] = ''
-
-# Deleting pre-existing city, state, country columns from df1 if they exists
-df1 = df1.drop(columns=['city','state','country'], errors='ignore')
-
-#join the three new columns
-df1 = df1.join(parts[['city','state','country']])
-
-df2['month'] = df2['date'].dt.month
-df2['year'] = df2['date'].dt.year
-df2['b_record'] = (
-    df2['b_wins'].astype(str) + '-' +
-    df2['b_losses'].astype(str) + '-' +
-    df2['b_draws'].astype(str)
-)
-df2['r_record'] = (
-    df2['r_wins'].astype(str) + '-' +
-    df2['r_losses'].astype(str) + '-' +
-    df2['r_draws'].astype(str)
-)
-
-# Same for df2
-parts = df2['location'].str.split(',', n=2, expand=True)
-parts = parts.apply(lambda col: col.str.strip())
-parts.columns = ['city','state','country']
-
-mask = parts['country'].isna() & parts['state'].notna()
-parts.loc[mask, 'country'] = parts.loc[mask, 'state']
-parts.loc[mask, 'state'] = ''
-
-df2 = df2.drop(columns=['city','state','country'], errors='ignore')
-
-df2 = df2.join(parts[['city','state','country']])
-
-
+df1 = preprocess(df1)
+df2 = preprocess(df2)
 ########################################################
-#Filtering for columns needed for the two main datasets
 
-cols_to_keep = ['r_fighter','b_fighter', 'event','date','month','year', 'gender', 'location', 
-    'city','state', 'country', 'referee', 'winner', 'finish', 'finishdetails','finishround',
-    'totalfighttimesecs','titlebout', 'weightclass', 'numberofrounds', 'emptyarena',
-    'heightdif','agedif', 'reachdif', 
-    'r_age' ,'r_stance', 'r_heightcms', 'r_reachcms', 'r_weightlbs', 'b_odds', 'b_record',
-    'b_age', 'b_stance', 'b_heightcms', 'b_reachcms', 'b_weightlbs', 'r_odds', 'r_record',
-    'r_losses','r_draws', 'r_wins','r_winsbydecisionmajority', 'r_winsbydecisionunanimous', 
-    'r_winsbydecisionmajority', 'r_winsbydecisionsplit', 'r_winsbydecisionunanimous',
-    'r_winsbyko', 'r_winsbysubmission', 'r_winsbytkodoctorstoppage',
-    'b_losses', 'b_draws', 'b_wins','b_winsbydecisionmajority', 'b_winsbydecisionunanimous',
-    'b_winsbydecisionmajority', 'b_winsbydecisionsplit', 'b_winsbydecisionunanimous',
-    'b_winsbyko', 'b_winsbysubmission', 'b_winsbytkodoctorstoppage',
-    'r_avgkd','r_avgsigstratt', 'r_avgsigstrlanded', 'r_avgtdatt', 'r_avgtdlanded',
-    'r_avgsubatt', 'r_avgctrltime(seconds)', 'r_matchwcrank', 'r_pfprank',
-    'b_avgkd','b_avgsigstratt', 'b_avgsigstrlanded','b_avgtdatt', 'b_avgtdlanded',
-    'b_avgsubatt', 'b_avgctrltime(seconds)','b_matchwcrank', 'b_pfprank'
-    ]
+# WC / PFP ranked flags (True if rank is not null)
+df1["r_wc_ranked"]  = df1["r_matchwcrank"].notna()
+df1["r_pfp_ranked"] = df1["r_pfprank"].notna()
+df1["b_wc_ranked"]  = df1["b_matchwcrank"].notna()
+df1["b_pfp_ranked"] = df1["b_pfprank"].notna()
 
-# only keep the date that are in common for the two datasets
-df1 = df1[(df1['date'] >= start_date) & (df1['date'] <= end_date)].copy()
-df2 = df2[(df2['date'] >= start_date) & (df2['date'] <= end_date)].copy()
+# Champion flag (True if rank == 0; otherwise False, including nulls)
+df1["r_champion"] = df1["r_matchwcrank"].eq(0).fillna(False)
+df1["b_champion"] = df1["b_matchwcrank"].eq(0).fillna(False)
 
-# only keeping the needed columns for each dataset
-common1 = [c for c in cols_to_keep if c in df1.columns]
-df1 = df1[common1]
 
-common2 = [c for c in cols_to_keep if c in df2.columns]
-df2 = df2[common2]
-
+df1.to_csv("d1_post_ETL.csv",index = False)
 # Keeping only needed columns per each dataset before the merge
 
-col1 =['r_fighter', 'b_fighter', 'date', 'month', 'year', 'gender', 'location',
+col1 =['r_fighter', 'b_fighter', 'date', 'month', 'year', 'gender',
        'city', 'state', 'country', 'finish', 'finishdetails',
-       'finishround', 'totalfighttimesecs', 'titlebout', 'weightclass',
-       'numberofrounds', 'emptyarena', 'heightdif', 'agedif', 'reachdif',
-       'r_odds', 'r_age', 'r_stance', 'r_heightcms', 'r_reachcms', 'r_weightlbs',
-       'b_odds',  'b_age', 'b_stance', 'b_heightcms', 'b_reachcms','b_weightlbs', 
-       'r_matchwcrank', 'r_pfprank', 'b_matchwcrank', 'b_pfprank']
+       'finishround', 'titlebout', 'weightclass',
+       'numberofrounds', 'emptyarena',
+       'r_odds', 'r_age', 'r_stance',
+       'b_odds',  'b_age', 'b_stance',
+       'r_wc_ranked',"r_pfp_ranked","b_wc_ranked","b_pfp_ranked","r_champion","b_champion",
+       "r_undefeated", "b_undefeated","r_age_range","b_age_range",
+       'heightdif','reachdif','agedif']
 
-col2 = ['r_fighter', 'b_fighter', 'date', 'referee', 'winner', 
-       'r_record','r_losses', 'r_draws', 'r_wins','r_winsbydecisionmajority', 'r_winsbydecisionunanimous',
-       'r_winsbydecisionsplit', 'r_winsbyko', 'r_winsbysubmission',
-       'r_winsbytkodoctorstoppage','b_record', 'b_losses', 'b_draws', 'b_wins',
-       'b_winsbydecisionmajority', 'b_winsbydecisionunanimous',
-       'b_winsbydecisionsplit', 'b_winsbyko', 'b_winsbysubmission',
-       'b_winsbytkodoctorstoppage', 'r_avgkd', 'r_avgsigstratt',
+col2 = ['r_fighter', 'b_fighter', 'date', 'referee', 'winner', 'r_avgkd', 'r_avgsigstratt',
        'r_avgsigstrlanded', 'r_avgtdatt', 'r_avgtdlanded', 'r_avgsubatt',
        'r_avgctrltime(seconds)', 'b_avgkd', 'b_avgsigstratt',
        'b_avgsigstrlanded', 'b_avgtdatt', 'b_avgtdlanded', 'b_avgsubatt',
        'b_avgctrltime(seconds)']
+
 df1= df1[col1]
 df2= df2[col2]
 
@@ -325,13 +265,16 @@ df2 = force_df2_names_from_df1(df2, mism)
 ###################################################
 #MERGE OPERATION
 
-key_cols = ['r_fighter', 'b_fighter', 'date']
+df1 = df1.rename(columns={"r_fighter": "r_name", "b_fighter": "b_name"})
+df2 = df2.rename(columns={"r_fighter": "r_name", "b_fighter": "b_name"})
+
+key_cols = ['r_name', 'b_name', 'date']
 
 df1.to_csv("d1_post_ETL.csv",index = False)
 df2.to_csv("d2_post_ETL.csv",index = False)
 
 df = pd.merge(df1, df2, how='outer', on=key_cols)
-df = df.sort_values(by=['date','r_fighter']).reset_index(drop=True)
+df = df.sort_values(by=['date','r_name']).reset_index(drop=True)
 df_events['date'] = pd.to_datetime(df_events['date'])
 df = df.merge(df_events[['date','event']], on =['date'], how = 'left')
 
@@ -340,27 +283,15 @@ df = df.merge(df_events[['date','event']], on =['date'], how = 'left')
 
 # we need to have a winner and a location: These are NULL if the fight did not happened, but was in the fight list
 df = df.dropna(subset=['winner'])
-df = df.dropna(subset=['location'])
-
-#Computing physical attribute differences red-blue
-df['heightdif'] = round(df['r_heightcms'] - df['b_heightcms'],2)
-df['reachdif'] = round(df['r_reachcms'] - df['b_reachcms'],2)
-df['agedif'] = round(df['r_age'] - df['b_age'],2)
+df = df.dropna(subset=['city'])
 
 ###########################################################
 # Columns typing and management of null values
 
 # Integer columns
 int_cols = [
-    'month','year','finishround','totalfighttimesecs','numberofrounds',
-    'r_odds','b_odds','r_age','b_age','agedif','r_weightlbs','b_weightlbs',
-    'r_matchwcrank','r_pfprank','b_matchwcrank','b_pfprank',
-    'r_losses','r_draws','r_wins','b_losses','b_draws','b_wins',
-    'r_winsbydecisionsplit','r_winsbyko','r_winsbysubmission',
-    'r_winsbydecisionmajority','r_winsbydecisionunanimous',
-    'r_winsbytkodoctorstoppage','b_winsbydecisionmajority',
-    'b_winsbydecisionunanimous','b_winsbydecisionsplit','b_winsbyko',
-    'b_winsbysubmission','b_winsbytkodoctorstoppage'
+    'month','year','finishround','numberofrounds',
+    'r_odds','b_odds','r_age','b_age','agedif',
 ]
 
 for x in int_cols:
@@ -368,6 +299,14 @@ for x in int_cols:
 
 df['titlebout'] = df['titlebout'].astype('bool')
 df['emptyarena'] = df['emptyarena'].astype('bool')
+df['r_undefeated'] = df['r_undefeated'].astype('bool')
+df['b_undefeated'] = df['b_undefeated'].astype('bool')
+df['r_wc_ranked'] = df['r_wc_ranked'].astype('bool')
+df["r_pfp_ranked"] = df["r_pfp_ranked"].astype('bool')
+df["b_wc_ranked"] = df["b_wc_ranked"].astype('bool')
+df["b_pfp_ranked"] = df["b_pfp_ranked"].astype('bool')
+df["r_champion"] = df["r_champion"].astype('bool')
+df["b_champion"] = df["b_champion"].astype('bool')
 
 avg_cols = [c for c in df.columns if c.startswith(('r_avg','b_avg'))]
 
@@ -378,32 +317,32 @@ df[avg_cols] = df[avg_cols].fillna(0)
 #check for null values counts in each column
 null_counts = df.isna().sum().reset_index()
 null_counts.columns = ['column', 'null_count']
-#print(null_counts)
+print(null_counts)
 
 ###################################################
 #Check for duplicates produced by the merge operation
 
 #There is no fighter with 2 fights on the same date
 def fighter_date_duplicate_row_pairs(df: pd.DataFrame) -> pd.DataFrame:
-    x = df[["date", "r_fighter", "b_fighter"]].copy()
+    x = df[["date", "r_name", "b_name"]].copy()
     x = x.reset_index(names="row_id")
 
     # Build an "appearances" table: one row per (original_row, date, fighter, side)
-    red = x[["row_id", "date", "r_fighter"]].rename(columns={"r_fighter": "fighter"})
+    red = x[["row_id", "date", "r_name"]].rename(columns={"r_name": "name"})
     red["side"] = "R"
-    blue = x[["row_id", "date", "b_fighter"]].rename(columns={"b_fighter": "fighter"})
+    blue = x[["row_id", "date", "b_name"]].rename(columns={"b_name": "name"})
     blue["side"] = "B"
 
-    app = pd.concat([red, blue], ignore_index=True).dropna(subset=["date", "fighter"])
-    app = app[app["fighter"] != ""]  # drop empty strings if any
+    app = pd.concat([red, blue], ignore_index=True).dropna(subset=["date", "name"])
+    app = app[app["name"] != ""]  # drop empty strings if any
 
     # Self-join within same (date, fighter) to get row pairs; keep row_id_1 < row_id_2
-    pairs = app.merge(app, on=["date", "fighter"], suffixes=("_1", "_2"))
+    pairs = app.merge(app, on=["date", "name"], suffixes=("_1", "_2"))
     pairs = pairs[pairs["row_id_1"] < pairs["row_id_2"]]
 
     return (
-        pairs[["date", "fighter", "row_id_1", "row_id_2", "side_1", "side_2"]]
-        .sort_values(["date", "fighter", "row_id_1", "row_id_2"])
+        pairs[["date", "name", "row_id_1", "row_id_2", "side_1", "side_2"]]
+        .sort_values(["date", "name", "row_id_1", "row_id_2"])
         .reset_index(drop=True)
     )
 
@@ -413,23 +352,17 @@ pairs = fighter_date_duplicate_row_pairs(df)
 ###################################################
 # Ordering
 desired_order = [
-    'r_fighter','b_fighter','event','date','month','year','gender',
-    'location','city','state','country','referee','winner','finish',
-    'finishdetails','finishround','totalfighttimesecs','titlebout',
+    'r_name','b_name','event','date','month','year','gender',
+    'city','state','country','referee','winner','finish',
+    'finishdetails','finishround','titlebout',
     'weightclass','numberofrounds','emptyarena','heightdif','agedif',
-    'reachdif','r_odds','r_age','r_stance','r_heightcms','r_reachcms',
-    'r_weightlbs','b_odds','b_age','b_stance','b_heightcms','b_reachcms',
-    'b_weightlbs','r_record','r_losses','r_draws','r_wins',
-    'r_winsbydecisionmajority','r_winsbydecisionunanimous',
-    'r_winsbydecisionsplit','r_winsbyko','r_winsbysubmission',
-    'r_winsbytkodoctorstoppage','b_record','b_losses','b_draws',
-    'b_wins','b_winsbydecisionunanimous','b_winsbydecisionmajority',
-    'b_winsbydecisionsplit','b_winsbyko','b_winsbysubmission',
-    'b_winsbytkodoctorstoppage','r_avgkd','r_avgsigstratt',
+    'reachdif','r_odds','r_age','r_age_range','r_stance','b_odds','b_age',
+    'r_age_range','b_stance','r_avgkd','r_avgsigstratt',
     'r_avgsigstrlanded','r_avgtdatt','r_avgtdlanded','r_avgsubatt',
-    'r_avgctrltime(seconds)','r_matchwcrank','r_pfprank','b_avgkd',
+    'r_avgctrltime(seconds)','b_avgkd',
     'b_avgsigstratt','b_avgsigstrlanded','b_avgtdatt','b_avgtdlanded',
-    'b_avgsubatt','b_avgctrltime(seconds)','b_matchwcrank','b_pfprank'
+    'b_avgsubatt','b_avgctrltime(seconds)','r_undefeated','b_undefeated',
+    'r_wc_ranked',"r_pfp_ranked","b_wc_ranked","b_pfp_ranked","r_champion","b_champion",
 ]
 
 #some columns are duplicated
